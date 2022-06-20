@@ -1,1 +1,9 @@
+<<<<<<< HEAD
 {}
+=======
+{
+  "search.exclude": {
+    "**/node_modules": false
+  }
+}
+>>>>>>> feature/manifest
