@@ -1,16 +1,16 @@
 let db;
-// create a new db request for a "budget" database.
 const request = indexedDB.open("budget", 1);
 
 request.onupgradeneeded = function (event) {
-  // create object store called "new_transaction" and set autoIncrement to true
   const db = event.target.result;
   db.createObjectStore("new_transaction", { autoIncrement: true });
 };
 
 request.onsuccess = function (event) {
+  // when db is successfully created with its object store (from onupgradedneeded event above), save reference to db in global variable
   db = event.target.result;
 
+  // check if app is online, if yes run checkDatabase() function to send all local db data to api
   if (navigator.onLine) {
     uploadTransaction();
   }
@@ -22,28 +22,28 @@ request.onerror = function (event) {
 };
 
 function saveRecord(record) {
-  // create a transaction on the new_transaction db with readwrite access
   const transaction = db.transaction(["new_transaction"], "readwrite");
 
-  // access your new_transaction object store
-  const budgetObjectStore = transaction.objectStore("new_transaction");
+  const transactionsObjectStore = transaction.objectStore("new_transaction");
 
   // add record to your store with add method.
-  budgetObjectStore.add(record);
+  transactionsObjectStore.add(record);
 }
 
 function uploadTransaction() {
-  // open a transaction on your new_transaction db
+  // open a transaction on your pending db
   const transaction = db.transaction(["new_transaction"], "readwrite");
 
-  // access your new_transaction object store
-  const budgetObjectStore = transaction.objectStore("new_transaction");
+  // access your pending object store
+  const transactionsObjectStore = transaction.objectStore("new_transaction");
+
   // get all records from store and set to a variable
-  const getAll = budgetObjectStore.getAll();
+  const getAll = transactionsObjectStore.getAll();
 
   getAll.onsuccess = function () {
+    // if there was data in indexedDb's store, let's send it to the api server
     if (getAll.result.length > 0) {
-      fetch("/api/transaction/bulk", {
+      fetch("/api/transaction", {
         method: "POST",
         body: JSON.stringify(getAll.result),
         headers: {
@@ -52,19 +52,24 @@ function uploadTransaction() {
         },
       })
         .then((response) => response.json())
-        .then(() => {
-          // if successful, open a transaction on your new_transaction db
+        .then((serverResponse) => {
+          if (serverResponse.message) {
+            throw new Error(serverResponse);
+          }
+
           const transaction = db.transaction(["new_transaction"], "readwrite");
-
-          // access your new_transaction object store
-          const budgetObjectStore = transaction.objectStore("new_transaction");
-
+          const transactionsObjectStore = transaction.objectStore("new_transaction");
           // clear all items in your store
-          budgetObjectStore.clear();
+          transactionsObjectStore.clear();
+        })
+        .catch((err) => {
+          // set reference to redirect back here
+          console.log(err);
         });
     }
   };
 }
 
 // listen for app coming back online
+
 window.addEventListener("online", uploadTransaction);
